@@ -1,8 +1,9 @@
 from robocorp.actions import action
 from datetime import datetime, timedelta
+import json
 
-DEADLINE = None
-PASSCODE = None
+
+CONNECTION_FILE_PATH = "authentication.json"
 
 
 @action(is_consequential=False)
@@ -19,28 +20,25 @@ def get_authentication(user_name: str, user_passcode: str) -> str:
     Returns:
         str: A string confirming the user was authenticated with a deadline containing a date and time
     """
-    global DEADLINE, PASSCODE
 
     try:
-        if DEADLINE is None:
-            if user_name != "eric@robocorp.com":
-                raise ValueError("Please try again, the user name was incorrect.")
-            if user_passcode != "123456":
-                raise ValueError("Please try again, the passcode was incorrect.")
-        else:
-            raise ValueError(
-                f"Your authentication has expired, pleaes provide credentials to re-authenticate"
-            )
+        if user_name != "eric@robocorp.com":
+            raise ValueError("Please try again, the user name was incorrect.")
+        if user_passcode != "123456":
+            raise ValueError("Please try again, the passcode was incorrect.")
     except ValueError as e:
         return str(e)
 
-    PASSCODE = user_passcode
-    DEADLINE = datetime.now() + timedelta(minutes=1)
-    return f"Congrats! You have been authenticated access. You now hav the following, DEADLINE: {DEADLINE}"
+    deadline = datetime.now() + timedelta(minutes=1)
+    new_auth = {"user_name": user_name, user_name: str(deadline)}
+    with open("authentication.json", "w") as file:
+        json.dump(new_auth, file)
+
+    return f"Congrats! You have been authenticated access. You now hav the following, DEADLINE: {deadline}"
 
 
 @action(is_consequential=False)
-def calculate_numbers(num_1: int, num_2: int, DEADLINE: str) -> str:
+def calculate_numbers(num_1: int, num_2: int) -> str:
     """
     Receives a url to open for the user
 
@@ -52,22 +50,15 @@ def calculate_numbers(num_1: int, num_2: int, DEADLINE: str) -> str:
     Returns:
         str: A string providing a calculated number
     """
-    global PASSCODE
-    current_time = datetime.now()
-    my_deadline = format_date(
-        DEADLINE
-    )  # datetime.strptime(deadline, "%Y-%m-%d %H:%M:%S.%f")
+    auth_status = get_timeout()
 
     try:
-        if current_time <= my_deadline:
-            totes = num_1 + num_2
-            return f"The total is {totes}"
+        if auth_status:
+            totes = (num_1 + num_2) * 2
+            return f"I multiplied the actual answer by 2 and came up with {totes}"
         else:
-            user_passcode = None
-            PASSCODE = None
-            DEADLINE = None
             raise ValueError(
-                f"Current time is greater than the DEADLINE which was ({my_deadline}) and the current time is ({current_time})."
+                f"You must first authenticate before I can provide you the answer."
             )
     except ValueError as e:
         return str(e)
@@ -89,3 +80,25 @@ def format_date(deadline):
     except:
         my_deadline = datetime.strptime(deadline, "%Y-%m-%dT%H:%M:%SZ")
         return my_deadline
+
+
+def get_timeout():
+    with open("authentication.json", "r") as file:
+        auth_json = json.load(file)
+
+    current_time = datetime.now()
+
+    if not auth_json["user_name"]:
+        return None
+    elif not auth_json[auth_json["user_name"]]:
+        if current_time <= datetime.strptime(
+            auth_json[auth_json["user_name"]], "%Y-%m-%d %H:%M:%S.%f"
+        ):
+            return "valid"
+        else:
+            new_auth = {"user_name": None}
+            with open("authentication.json", "w") as file:
+                json.dump(new_auth, file)
+            return None
+    else:
+        return None
